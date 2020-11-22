@@ -1,132 +1,83 @@
 package com.mba.gameoflife
 
-import com.mba.gameoflife.CellState.{Alive, Dead}
-
 import scala.util.Random
 
 
-case class Game(iterationNumber: Int = 0, cells: Array[Array[Cell]]) {
 
-  def neighboursOf(cell: Cell): List[Cell] = cells.find(_.contains(cell)).map { row =>
+sealed trait CellState
+case object Alive extends CellState
+case object Dead extends CellState
 
-    val (x, y) = (cells.indexOf(row), row.indexOf(cell))
+case class Cell(state: CellState) 
 
-    def cellAt(x: Int, y: Int): Cell = {
-      val indices = cells.indices
-      def inRange(index: Int) = index match {
-        case i if i < indices.start => indices.last
-        case i if i > indices.last => indices.start
-        case i => i
-      }
-      cells(inRange(x))(inRange(y))
-    }
+object Cell {
 
-    List(
-      cellAt(x - 1, y - 1), cellAt(x - 1, y), cellAt(x - 1, y + 1),
-      cellAt(x, y - 1), cellAt(x, y + 1),
-      cellAt(x + 1, y - 1), cellAt(x + 1, y), cellAt(x + 1, y + 1)
-    )
-
-  }.getOrElse(List())
-
-  def nextIteration(): Game = {
-
-    val next = Game(iterationNumber + 1, this.cells.clone())
-
-    val job = for {
-      row <- cells.indices
-      column <- cells(0).indices
-      cell = cells(row)(column)
-    } yield {
-      ((row, column), cell, neighboursOf(cell))
-    }
-
-    job.par.foreach { case ((x, y), c, neighbours) =>
-      next.cells(x)(y) = c.become(neighbours)
-    }
-
-    next
+  def evolve (cell: Cell, neighbors : Array[Cell]) : Cell = 
+  (cell.state,neighbors.count(_.state == Alive)) match {
+    case (Alive,2|3) => Cell(Alive) 
+    case (Dead,3) => Cell(Alive)
+    case _ => Cell(Dead)
   }
+}
+
+
+case class Game(it: Int, cells: Game.Lines) {
+  val (numberOfRows, numberOfCols) = Game.dimension(this)
+  def cell(row : Int , column: Int) = if (row < 0 || column < 0  || row >= numberOfRows || column >= numberOfCols) Cell(Dead) else cells(row)(column)
 }
 
 object Game {
 
+  type Lines = IndexedSeq[Columns]
+  type Columns = IndexedSeq[Cell]
 
-  def generateSquare(size: Int): Game = {
-
-    val cells = Array.ofDim[Cell](size, size)
-
-    val rows = 0 until size
-    val columns = 0 until size
-
-    for {
-      row <- rows
-      column <- columns
-    } {
-      cells(row)(column) = Cell(if (Random.nextBoolean()) CellState.Alive else CellState.Dead)
-    }
-
-    Game(iterationNumber = 0, cells)
-  }
-
-}
+  val initial : Game = Game(it = 0, cells =
+      IndexedSeq(  
+          IndexedSeq( Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead) ),
+          IndexedSeq( Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead) ),
+          IndexedSeq( Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead) ),
+          IndexedSeq( Cell(Dead), Cell(Alive), Cell(Dead), Cell(Dead), Cell(Dead) ),
+          IndexedSeq( Cell(Dead), Cell(Dead), Cell(Alive), Cell(Dead), Cell(Dead) ),
+          IndexedSeq( Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead), Cell(Dead) ),
+       )
+  )
 
 
-sealed trait CellState
+  def random(rows: Int, columns: Int) : Game = Game(0, IndexedSeq.fill(rows)(IndexedSeq.fill(columns)(Cell(if(Random.nextBoolean) Alive else Dead)))) 
 
-object CellState {
-
-  case object Dead extends CellState
-
-  case object Alive extends CellState
-
-}
-
-case class Cell(state: CellState) {
-
-  def become(neighbours: List[Cell]): Cell = neighbours.count(_.state == Alive) match {
-    case 2 => this
-    case 3 => this.copy(state = Alive)
-    case _ => this.copy(state = Dead)
-  }
-
-}
-
-trait GamePrinter {
-  def print(game: Game): Unit
-}
-
-object ConsoleGamePrinter extends GamePrinter{
-
-  def string(cell: Cell): String = {
-
-    cell.state match {
-      case Dead => "_"
-      case Alive => "!"
-    }
-
-  }
+  def games(initial: Game) : LazyList[Game] =  initial #:: games(initial).scan(initial)( (g, _) => Game.play(g) ).tail
 
 
-  def print(game: Game): Unit = {
-    println(s"iteration ${game.iterationNumber}")
-    game.cells.foreach { row =>
-      println(row.map(string).mkString("\t"))
-    }
-  }
+  type NumberOfLines = Int
+  type NumberOfColumns = Int
+
+  def dimension(game : Game) : (NumberOfLines, NumberOfColumns) = (game.cells.size, game.cells.head.size)
+
+  def neighbors(game: Game, row: Int, column: Int) : Array[Cell] = Array(
+    game.cell(row - 1,column - 1),
+    game.cell(row - 1,column),
+    game.cell(row - 1,column + 1),
+    game.cell(row,column - 1),
+    game.cell(row, column + 1),
+    game.cell(row + 1,column - 1),
+    game.cell(row + 1,column),
+    game.cell(row + 1,column + 1)
+  )
+
+
+  def play(game : Game) : Game = Game( 
+        it = game.it + 1, 
+        cells = 
+          (for( row <- (0 to game.numberOfRows - 1) ) yield {
+
+            (for ( column <-  0 to game.numberOfCols  - 1 )  yield  Cell.evolve(game.cells(row)(column), neighbors(game,row, column)))
+           
+          })
+  )
+
 
 
 }
 
 
-object Runner extends App {
 
-  val printer = ConsoleGamePrinter
-
-  var game = Game.generateSquare(3)
-  printer.print(game)
-  1 to 10 foreach { it =>
-    game = game.nextIteration()
-    printer.print(game)
-  }
-}

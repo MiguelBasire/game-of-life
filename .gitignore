@@ -1,4 +1,10 @@
 .idea/
-project/
-target/
+.vscode/
+.bloop/
+.bsp/
+.metals/
 
+project/*
+!project/build.properties
+
+target/
