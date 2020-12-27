@@ -5,17 +5,16 @@ import com.mba.gameoflife.GamePrinter._
 
 object Main extends App {
 
-  val gs =  Game.games(Game.random(72,75))
+  val games =  Game.games(Game.random(76,150))
 
 
   println(" first ###### ")
-  printGame(gs.head)
+  printGame(games.head)
   
 
-  gs.zip(gs.drop(1))
+  games.zip(games.drop(1))
   .takeWhile{  case (g, next) => g.cells != next.cells }
   .map( _._2 ).foreach { g => 
-    Thread.sleep(500)
     println(s"############ ${g.it}")  
     printGame(g)(game) 
 
